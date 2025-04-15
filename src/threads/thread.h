@@ -91,10 +91,10 @@ struct thread
     int priority;                       /* Priority. */
 
     /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
-    int init_priority;
+    int base_priority;
 
-    struct lock *wait_on_lock;
-    struct list donations;
+    struct lock *waiting_lock;
+    struct list received_donations;
     struct list_elem donation_elem;
     /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
 
@@ -160,13 +160,13 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
-void thread_test_preemption (void);
+void yield_if_preempted (void);
 
-bool thread_compare_priority (const struct list_elem *, const struct list_elem *, void *);
-bool thread_compare_donate_priority (const struct list_elem *, const struct list_elem *, void *); //modified #3
+bool compare_thread_priority (const struct list_elem *, const struct list_elem *, void *);
+bool compare_thread_donated_priority (const struct list_elem *, const struct list_elem *, void *); //modified #3
 void donate_priority (void);
-void remove_with_lock (struct lock *);
-void refresh_priority (void);
+void remove_donation_for_lock (struct lock *);
+void update_effective_priority (void);
 /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
 
 /* modified #3 */

@@ -70,7 +70,7 @@ sema_down (struct semaphore *sema)
     {
 
       /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_compare_priority, 0);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, compare_thread_priority, 0);
       /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
       
         thread_block ();
@@ -120,7 +120,7 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)) {
 
     /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
-    list_sort (&sema->waiters, thread_compare_priority, 0);
+    list_sort (&sema->waiters, compare_thread_priority, 0);
     /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
 
     thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
@@ -128,7 +128,7 @@ sema_up (struct semaphore *sema)
   sema->value++;
   
   /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
-  thread_test_preemption ();
+  yield_if_preempted ();
   /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
   
   intr_set_level (old_level);
@@ -215,16 +215,16 @@ lock_init (struct lock *lock)
      struct thread *cur = thread_current ();
    
      if (!thread_mlfqs && lock->holder) {
-       cur->wait_on_lock = lock;
-       list_insert_ordered (&lock->holder->donations,
+       cur->waiting_lock = lock;
+       list_insert_ordered (&lock->holder->received_donations,
                             &cur->donation_elem,
-                            thread_compare_donate_priority, 0);
+                            compare_thread_donated_priority, 0);
        donate_priority ();
      }
    
      sema_down (&lock->semaphore);
    
-     cur->wait_on_lock = NULL;
+     cur->waiting_lock = NULL;
      lock->holder = cur;
    }
 
@@ -265,8 +265,8 @@ lock_try_acquire (struct lock *lock)
      ASSERT (lock_held_by_current_thread (lock));
    
      if (!thread_mlfqs) {
-       remove_with_lock (lock);
-       refresh_priority ();
+       remove_donation_for_lock (lock);
+       update_effective_priority ();
      }
    
      lock->holder = NULL;
@@ -326,16 +326,16 @@ cond_init (struct condition *cond)
 
 /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
 bool 
-sema_compare_priority (const struct list_elem *l, const struct list_elem *s, void *aux UNUSED)
+compare_sema_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
-  struct semaphore_elem *l_sema = list_entry (l, struct semaphore_elem, elem);
-	struct semaphore_elem *s_sema = list_entry (s, struct semaphore_elem, elem);
+  struct semaphore_elem *sema_a = list_entry (a, struct semaphore_elem, elem);
+	struct semaphore_elem *sema_b = list_entry (b, struct semaphore_elem, elem);
   
-	struct list *waiter_l_sema = &(l_sema->semaphore.waiters);
-	struct list *waiter_s_sema = &(s_sema->semaphore.waiters);
+	struct list *waiter_sema_a = &(sema_a->semaphore.waiters);
+	struct list *waiter_sema_b = &(sema_b->semaphore.waiters);
   
-	return list_entry (list_begin (waiter_l_sema), struct thread, elem)->priority
-  > list_entry (list_begin (waiter_s_sema), struct thread, elem)->priority;
+	return list_entry (list_begin (waiter_sema_a), struct thread, elem)->priority
+  > list_entry (list_begin (waiter_sema_b), struct thread, elem)->priority;
 }
 /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
 
@@ -353,7 +353,7 @@ cond_wait (struct condition *cond, struct lock *lock)
 
   /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
   //list_push_back (&cond->waiters, &waiter.elem);
-  list_insert_ordered (&cond->waiters, &waiter.elem, sema_compare_priority, 0);
+  list_insert_ordered (&cond->waiters, &waiter.elem, compare_sema_priority, 0);
   /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
 
   lock_release (lock);
@@ -379,7 +379,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   if (!list_empty (&cond->waiters)) {
     
     /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
-    list_sort (&cond->waiters, sema_compare_priority, 0);
+    list_sort (&cond->waiters, compare_sema_priority, 0);
     /* ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY ITISYIJY */
     
     sema_up (&list_entry (list_pop_front (&cond->waiters), struct semaphore_elem, elem)->semaphore);
